@@ -1,5 +1,5 @@
-#ifndef FFT_LIB_H
-#define FFT_LIB_H
+#ifndef FFT_H
+#define FFT_H
 
 typedef struct 
 {

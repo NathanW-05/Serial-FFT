@@ -88,8 +88,8 @@ float* generate_test_signal(int N, float A, float F, float sampling_rate)
 
 int dominant_index(Bin* bins, int N)
 {
-    int idx = 0;
-    for(int i = 0; i < N/2; i++)
+    int idx = 1;
+    for(int i = 2; i < N/2; i++)
     {
         idx = (bins[i].magnitude > bins[idx].magnitude) ?
          i : idx;
