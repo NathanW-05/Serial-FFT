@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <pthread.h>
+#include <windows.h>
 
 volatile int swap_ready = 1;
 volatile int buffer_filled = 0;
@@ -9,15 +10,16 @@ volatile int buffer_filled = 0;
 uint8_t* write_buffer = NULL;
 uint8_t* read_buffer = NULL;
 
+static HANDLE handle = NULL;
+
 int packet_count = 0;
 
-HANDLE init_serial(const char* port, int baud_rate)
+void init_serial(const char* port, int baud_rate)
 {
-    HANDLE handle = CreateFile(port, GENERIC_READ|GENERIC_WRITE, 0, NULL,OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    handle = CreateFile(port, GENERIC_READ|GENERIC_WRITE, 0, NULL,OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (handle == INVALID_HANDLE_VALUE)
     {
         printf("Error setting serial handle\n");
-        return NULL;
     }
     else 
     {
@@ -31,7 +33,6 @@ HANDLE init_serial(const char* port, int baud_rate)
     {
         printf("Error getting device state\n");
         CloseHandle(handle);
-        return NULL;
     }
     dcbsp.BaudRate = baud_rate;
     dcbsp.ByteSize = 8;
@@ -42,14 +43,12 @@ HANDLE init_serial(const char* port, int baud_rate)
     {
         printf("Error setting device parameters\n");
         CloseHandle(handle);
-        return NULL;
     }
     COMMTIMEOUTS timeouts = {0};
     timeouts.ReadIntervalTimeout = 50;
     timeouts.ReadTotalTimeoutConstant = 50;
     timeouts.ReadTotalTimeoutMultiplier = 10;
     SetCommTimeouts(handle, &timeouts);
-    return handle;
 }
 
 static void* begin_read(void* args)
@@ -59,8 +58,8 @@ static void* begin_read(void* args)
     int target_headers = arg->packets_per_write+1;  // data after final header carries over yielding n-1 packets
     int buffer_size = (arg->header_len + arg->data_len) * target_headers;
     
-    write_buffer = malloc(buffer_size);
-    read_buffer = malloc(buffer_size);
+    write_buffer = (uint8_t*)malloc(buffer_size);
+    read_buffer = (uint8_t*)malloc(buffer_size);
     
     int accum_size = 0;
     DWORD bytes_read = 0;
@@ -79,7 +78,7 @@ static void* begin_read(void* args)
             continue;
         }
 
-        BOOL ok = ReadFile(arg->handle, write_buffer + accum_size, (buffer_size) - accum_size, &bytes_read, NULL);
+        BOOL ok = ReadFile(handle, write_buffer + accum_size, (buffer_size) - accum_size, &bytes_read, NULL);
         if(ok && bytes_read > 0)
         {
             for(DWORD i = 0; i < bytes_read; i++)
@@ -124,11 +123,10 @@ static void* begin_read(void* args)
     }
 }
 
-void begin_read_thread(HANDLE serial_handle, uint8_t* header, int header_len, int data_length, int packets_per_write)
+void begin_read_thread(uint8_t* header, int header_len, int data_length, int packets_per_write)
 {
     pthread_t thread;
     ReadArgs* args = (ReadArgs*)malloc(sizeof(ReadArgs));
-    args->handle = serial_handle;
     args->header = header;
     args->header_len = header_len;
     args->data_len = data_length;
@@ -141,13 +139,13 @@ void begin_read_thread(HANDLE serial_handle, uint8_t* header, int header_len, in
 int counter = 0;
 uint16_t** parse_packet(uint8_t* raw, int packet_count, int header_size, int payload_size)
 {
-    uint16_t** chunks = malloc(packet_count * sizeof(uint16_t*));
+    uint16_t** chunks = (uint16_t**)malloc(packet_count * sizeof(uint16_t*));
     int jump = header_size + payload_size;
     
     for(int p = 0; p < packet_count; p++)
     {
         uint8_t* payload = raw + (p * jump) + header_size;
-        chunks[p] = malloc(payload_size);
+        chunks[p] = (uint16_t*)malloc(payload_size);
         memcpy(chunks[p], payload, payload_size);
 
         //for(int i = 0; i < payload_size / 2; i++)

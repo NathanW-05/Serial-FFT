@@ -12,8 +12,8 @@ static void fft_recursive(Complex* X, int N)
         return;
     }
 
-    Complex* even = malloc(N/2*sizeof(Complex));
-    Complex* odd = malloc(N/2*sizeof(Complex));
+    Complex* even = (Complex*)malloc(N/2*sizeof(Complex));
+    Complex* odd = (Complex*)malloc(N/2*sizeof(Complex));
 
     for(int i = 0; i < N / 2; i++)
     {
@@ -44,8 +44,8 @@ static void fft_recursive(Complex* X, int N)
 
 Bin* compute_fft(int N, float* signal, float sampling_rate)
 {
-    Complex* complex_signal = malloc(N * sizeof(Complex));
-    Bin* output_bins = malloc(N * sizeof(Bin));
+    Complex* complex_signal = (Complex*)malloc(N * sizeof(Complex));
+    Bin* output_bins = (Bin*)malloc(N * sizeof(Bin));
 
     for (int i = 0; i < N; i++) 
     {
@@ -77,7 +77,7 @@ Bin* compute_fft(int N, float* signal, float sampling_rate)
 
 float* generate_test_signal(int N, float A, float F, float sampling_rate)
 {
-    float* signal = malloc(N*sizeof(float));
+    float* signal = (float*)malloc(N*sizeof(float));
     for(int i = 0; i < N; i++)
     {
         double time = (float)i / sampling_rate;
@@ -88,11 +88,25 @@ float* generate_test_signal(int N, float A, float F, float sampling_rate)
 
 int dominant_index(Bin* bins, int N)
 {
-    int idx = 1;
+    int idx = -1;
     for(int i = 2; i < N/2; i++)
     {
-        idx = (bins[i].magnitude > bins[idx].magnitude) ?
+        if(bins[i].frequency > 700)
+        {
+            idx = (bins[i].magnitude > bins[idx].magnitude) ?
          i : idx;
+        }
     }
     return idx;
+}
+
+int noise_floor_magnitude(Bin* bin, int N)
+{
+    int max_mag = 0;
+    for(int i = 2; i < N; i++)
+    {
+        float current_mag = bin[i].magnitude;
+        max_mag = (max_mag > current_mag) ? max_mag : current_mag;
+    }
+    return max_mag;
 }
