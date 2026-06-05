@@ -1,4 +1,5 @@
 #include "serial.h"
+
 #include <stdint.h>
 #include <stdio.h>
 #include <pthread.h>
@@ -12,14 +13,13 @@ uint8_t* read_buffer = NULL;
 
 static HANDLE handle = NULL;
 
-int packet_count = 0;
-
-void init_serial(const char* port, int baud_rate)
+int init_serial(const char* port, int baud_rate)
 {
     handle = CreateFile(port, GENERIC_READ|GENERIC_WRITE, 0, NULL,OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (handle == INVALID_HANDLE_VALUE)
     {
-        printf("Error setting serial handle\n");
+        //printf("Error setting serial handle\n");
+        return 0;
     }
     else 
     {
@@ -33,6 +33,7 @@ void init_serial(const char* port, int baud_rate)
     {
         printf("Error getting device state\n");
         CloseHandle(handle);
+        return 0;
     }
     dcbsp.BaudRate = baud_rate;
     dcbsp.ByteSize = 8;
@@ -43,20 +44,20 @@ void init_serial(const char* port, int baud_rate)
     {
         printf("Error setting device parameters\n");
         CloseHandle(handle);
+        return 0;
     }
     COMMTIMEOUTS timeouts = {0};
     timeouts.ReadIntervalTimeout = 50;
     timeouts.ReadTotalTimeoutConstant = 50;
     timeouts.ReadTotalTimeoutMultiplier = 10;
     SetCommTimeouts(handle, &timeouts);
+    return 1;
 }
 
 static void* begin_read(void* args)
 {
-    ReadArgs* arg = (ReadArgs*)args;
-
-    int target_headers = arg->packets_per_write+1;  // data after final header carries over yielding n-1 packets
-    int buffer_size = (arg->header_len + arg->data_len) * target_headers;
+    int target_headers = PACKETS_PER_WRITE+1;  // data after final header carries over yielding n-1 packets
+    int buffer_size = (HEADER_LEN_BYTES + DATA_LEN_BYTES) * target_headers;
     
     write_buffer = (uint8_t*)malloc(buffer_size);
     read_buffer = (uint8_t*)malloc(buffer_size);
@@ -84,13 +85,13 @@ static void* begin_read(void* args)
             for(DWORD i = 0; i < bytes_read; i++)
             {
                 uint8_t byte = write_buffer[accum_size + i];
-                if(byte == arg->header[header_match])
+                if(byte == header[header_match])
                 {
                     header_match++;
-                    if(header_match == arg->header_len)
+                    if(header_match == HEADER_LEN_BYTES)
                     {
                         packet_count++;
-                        last_header_pos = accum_size + i - 3;
+                        last_header_pos = accum_size + i - PACKETS_PER_WRITE - 1;
                         header_match = 0;
                     }
                 }
@@ -119,38 +120,47 @@ static void* begin_read(void* args)
                 last_header_pos = 0;
                 swap_ready = 0;
             }
+        } else 
+        {
+            DWORD last_error = GetLastError();
+            if(last_error == ERROR_OPERATION_ABORTED)
+            {
+                handle = INVALID_HANDLE_VALUE;
+                CloseHandle(handle);
+                break;
+            }
         }
     }
 }
 
-void begin_read_thread(uint8_t* header, int header_len, int data_length, int packets_per_write)
+void begin_read_thread()
 {
     pthread_t thread;
-    ReadArgs* args = (ReadArgs*)malloc(sizeof(ReadArgs));
-    args->header = header;
-    args->header_len = header_len;
-    args->data_len = data_length;
-    args->packets_per_write = packets_per_write;
 
-    pthread_create(&thread, NULL, begin_read, args);
+    pthread_create(&thread, NULL, begin_read, NULL);
     pthread_detach(thread);
 }
 
 int counter = 0;
-uint16_t** parse_packet(uint8_t* raw, int packet_count, int header_size, int payload_size)
+uint16_t** parse_packet(uint8_t* raw)
 {
-    uint16_t** chunks = (uint16_t**)malloc(packet_count * sizeof(uint16_t*));
-    int jump = header_size + payload_size;
+    uint16_t** chunks = (uint16_t**)malloc(PACKETS_PER_WRITE * sizeof(uint16_t*));
+    int jump = HEADER_LEN_BYTES + DATA_LEN_BYTES;
     
-    for(int p = 0; p < packet_count; p++)
+    for(int p = 0; p < PACKETS_PER_WRITE; p++)
     {
-        uint8_t* payload = raw + (p * jump) + header_size;
-        chunks[p] = (uint16_t*)malloc(payload_size);
-        memcpy(chunks[p], payload, payload_size);
+        uint8_t* payload = raw + (p * jump) + HEADER_LEN_BYTES;
+        chunks[p] = (uint16_t*)malloc(DATA_LEN_BYTES);
+        memcpy(chunks[p], payload, DATA_LEN_BYTES);
 
         //for(int i = 0; i < payload_size / 2; i++)
         //{
         //}
     }
     return chunks;
+}
+
+int is_serial_open()
+{
+    return (handle != INVALID_HANDLE_VALUE && handle != NULL);
 }

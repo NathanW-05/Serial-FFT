@@ -1,67 +1,96 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <math.h>
 
-#include "fft.h"
+#include "signal.h"
 #include "serial.h"
 #include "include/raylib.h"
+#include "config.h"
+#include "radar.h"
 
-#define N 1024 // power of 2
-#define FS 10000 // must be at least 2x dominant frequency of your signal
-#define DATA_LEN_BYTES 2048
-#define HEADER_LEN_BYTES 4
-#define PACKETS_PER_WRITE 4
-#define BASE_FREQ 24.125E9
-#define C 3E8
+#define RAYGUI_IMPLEMENTATION
+#include "include/raygui.h"
 
-uint8_t header[] = {0xA5, 0x5A, 0xFF, 0x00};
-
-float max_speed(float freq) 
-{ 
-    return 2.2 * ((freq * (float)C) / (2.0f * (float)BASE_FREQ)); 
-}
+__declspec(dllimport) void __stdcall Sleep(unsigned long dwMilliseconds);
 
 int main()
 {
-    init_serial("COM4", 1000000);
-    begin_read_thread(header, HEADER_LEN_BYTES, DATA_LEN_BYTES, PACKETS_PER_WRITE);
-
+    // initialize raygui
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     SetTraceLogLevel(LOG_NONE); 
-    InitWindow(800, 450, "Serial FFT Data");
-
-    while (!WindowShouldClose())
+    InitWindow(1000, 1000, "Serial FFT Control Panel");
+    
+    while(!WindowShouldClose())
     {
+        if(!is_serial_open())
+        {
+            if(init_serial(PORT, BAUD_RATE))
+            {
+                update_status(IDLE);
+                begin_read_thread();
+            } else {
+                update_status(DISCONNECTED);
+            }
+        }
+
+        float sw = (float)GetScreenWidth();
+        float sh = (float)GetScreenHeight();
+
+        float padding = 20.0f;
+
+        float header_height = 100.0f;
+        Rectangle headerBounds = {padding, padding, sw - (padding * 2), header_height};
+
+        float footer_height = 100.0f;
+        Rectangle footerBounds = {padding, sh - footer_height - padding, sw - (padding * 2), footer_height};
+
+        float centerTop = headerBounds.y + headerBounds.height + padding;
+        float centerBottom = footerBounds.y - padding;
+        Rectangle centerBounds = {padding, centerTop, sw - (padding * 2), centerBottom - centerTop};
+
         BeginDrawing();
         ClearBackground(RAYWHITE);
-        DrawText("Test", 190, 200, 20, BLACK);
-        EndDrawing();
-    }
-    CloseWindow();
 
-    while(1)
-    {
+        /* Speed Label */
+        GuiSetStyle(DEFAULT, TEXT_SIZE, 50);
+        GuiLabel((Rectangle){headerBounds.x, headerBounds.y, headerBounds.width, headerBounds.height}, speed_text(get_last_speed()));
+        GuiSetStyle(DEFAULT, TEXT_SIZE, 30);
+
+        /* Serial Plot - ToDo*/
+        GuiGroupBox(centerBounds, "Live Serial Plot");
+        
+        /* Calibration Button */
+        int footer_element_width = 300;
+        if(GuiButton((Rectangle){footerBounds.x, footerBounds.y, 300, footerBounds.height}, "Calibrate")) 
+        {
+            update_status(CALIBRATING);
+        }
+
+        GuiLabel((Rectangle){footerBounds.x+footer_element_width+padding, footerBounds.y, footerBounds.width, footerBounds.height}, status_text());
+
+        /* Data Request & Processing */
         if(buffer_filled) // is there data available for processing?
         {
-            // 4x1024 16 bit raw ADC values
-            uint16_t** packets = parse_packet(read_buffer, PACKETS_PER_WRITE, HEADER_LEN_BYTES, DATA_LEN_BYTES);
-
-            for(int p = 0; p < PACKETS_PER_WRITE; p++)
+            if(get_status() != DISCONNECTED)
             {
-                float *f_samples = (float*)malloc(N * sizeof(float));
-                for(int i = 0; i < N; i++)
+                uint16_t** packets = parse_packet(read_buffer);
+                process_packets(packets);
+                for(int p = 0; p < PACKETS_PER_WRITE; p++)
                 {
-                    f_samples[i] = (float)packets[p][i];
+                    free(packets[p]);
                 }
-                Bin* fft = compute_fft(N, f_samples, FS);
-                free(packets[p]);
-                free(f_samples);
-                free(fft);
+                free(packets);
             }
-
-            free(packets);
-            swap_ready = 1; // swap the buffers, hopefully packets are waiting 
-            buffer_filled = 0; // need to refill the old buffer with fresh data
+            swap_ready = 1;
+            buffer_filled = 0;
+        } else
+        {
+            Sleep(TIMEOUT);
         }
+        EndDrawing();
     }
     return 0;
 }
+
 
