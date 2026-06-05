@@ -95,37 +95,6 @@ int calibrate(Bin* fft, float bias_increment)
     }
 }
 
-const char* status_text()
-{
-    switch(current_status)
-    {
-        case DISCONNECTED: 
-            return "Status: Disconnected";
-        case IDLE:
-            return "Status: Awaiting Calibration";
-        case CALIBRATING:
-            return "Status: Calibrating...";
-        case CALIBRATED:
-            return "Status: Calibrated";
-    }
-    return "Status: --";
-}
-
-const char* speed_text(float speed)
-{
-    static char buffer[48]; 
-    
-    float rounded = roundf(speed * 10.0f) / 10.0f;
-    if(speed > -1.0f)
-    {
-        snprintf(buffer, sizeof(buffer), "Speed: %.1f", rounded);
-    } else
-    {
-        return "Speed: --.-";
-    }
-    return buffer;
-}
-
 void process_packets(uint16_t** packets)
 {
     for(int p = 0; p < PACKETS_PER_WRITE; p++)
@@ -151,7 +120,7 @@ void process_packets(uint16_t** packets)
                 Bin peak_idx = run_CFAR(fft,g_bias, &hits);
                 float mph = 2.237 * ((peak_idx.frequency * (float)C) / (2.0f * (float)BASE_FREQ));
                 // test
-                if(mph > 5 && mph < 20) printf("peak frequency: %f    %f\n", mph, peak_idx.magnitude);
+                if(mph > 10 && mph < 80) printf("peak frequency: %f    %f\n", mph, peak_idx.magnitude);
                 
                 break;
             } 
