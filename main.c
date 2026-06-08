@@ -16,7 +16,6 @@ int main()
     init_raylib();
     while(!should_return())
     {
-        render_loop();
         if(!is_serial_open())
         {
             if(init_serial(PORT, BAUD_RATE))
@@ -45,6 +44,7 @@ int main()
         {
             Sleep(TIMEOUT);
         }
+        render_loop();
     }
     return 0;
 }

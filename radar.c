@@ -1,10 +1,10 @@
 #include <stdint.h>
 #include "radar.h"
 #include "config.h"
-#include "signal.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /*
     Global State Variables
@@ -13,6 +13,9 @@ STATUS current_status = DISCONNECTED;
 
 float last_speed = -1;
 float g_bias = 0;
+
+Bin ui_display_buffer[FFT_N / 2];
+int display_data_available = 0;
 
 void update_status(STATUS new)
 {
@@ -27,6 +30,16 @@ STATUS get_status()
 float get_last_speed()
 {
     return last_speed;
+}
+
+int get_fft_display_data(Bin* dest)
+{
+    if(!display_data_available) return 0;
+    for(int i = 0; i < FFT_N / 2; i++)
+    {
+        dest[i] = ui_display_buffer[i];
+    }
+    return 1;
 }
 
 Bin run_CFAR(Bin* fft, float bias, int* hits)
@@ -95,6 +108,19 @@ int calibrate(Bin* fft, float bias_increment)
     }
 }
 
+int detect_speed(Bin* fft)
+{
+    int hits = 0;
+    Bin peak_idx = run_CFAR(fft,g_bias, &hits);
+    float mph = 2.237 * ((peak_idx.frequency * (float)C) / (2.0f * (float)BASE_FREQ));
+    if(mph > 1 && mph < 80)
+    {
+        printf("target detected: %f    %f\n", mph, peak_idx.magnitude);
+        return 1;
+    }
+    return 0;
+}
+
 void process_packets(uint16_t** packets)
 {
     for(int p = 0; p < PACKETS_PER_WRITE; p++)
@@ -111,21 +137,20 @@ void process_packets(uint16_t** packets)
             case CALIBRATING:
             {
                 calibrate(fft, 1);
+                free(fft);
                 break;
             }
             
             case CALIBRATED:
             {
-                int hits = 0;
-                Bin peak_idx = run_CFAR(fft,g_bias, &hits);
-                float mph = 2.237 * ((peak_idx.frequency * (float)C) / (2.0f * (float)BASE_FREQ));
-                // test
-                if(mph > 10 && mph < 80) printf("peak frequency: %f    %f\n", mph, peak_idx.magnitude);
-                
+                if(detect_speed(fft))
+                {
+                    memcpy(ui_display_buffer, fft, FFT_N/2);
+                    display_data_available = 1;
+                } 
                 break;
             } 
         }
-        free(fft);
         free(f_samples);
     }
 }

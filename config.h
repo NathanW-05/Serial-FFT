@@ -10,7 +10,7 @@
 #define PACKETS_PER_WRITE 4 // number of packets to buffer
 #define BASE_FREQ 24.125E9 // base frequency of radar
 #define TIMEOUT 1 // ms to sleep while waiting for buffer filling
-#define PORT "COM4"
+#define PORT "COM3"
 #define BAUD_RATE 1000000
 
 static const uint8_t header[] = {0xA5, 0x5A, 0xFF, 0x00};

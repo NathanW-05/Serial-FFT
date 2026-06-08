@@ -7,6 +7,8 @@
 #include "ui.h"
 #include "include/raylib.h"
 #include "radar.h"
+#include "config.h"
+#include "signal.h"
 
 #define RAYGUI_IMPLEMENTATION
 #include "include/raygui.h"
@@ -82,14 +84,27 @@ void render_loop()
     /* Serial Plot - ToDo*/
     GuiGroupBox(centerBounds, "Live Serial Plot");
 
-    //float magnitude_scale = (centerBottom - centerTop) / 500;
-    //float frequency_scale = (sw - padding*2) / 512;
+    //float magnitude_scale = (centerBottom - centerTop) / 20;
+    float frequency_scale = (float)(sw - padding * 2) / (FFT_N / 2);
+    Bin fft[FFT_N/2];
 
-    //for(int i = centerBounds.x; i < centerBounds.x + centerBounds.width; i+=frequency_scale)
-    //{
-    //    DrawRectangle(i, centerBounds.y + centerBounds.height - 20*magnitude_scale, frequency_scale, 20*magnitude_scale, BLUE);
-    //}
-    
+    if (get_fft_display_data(fft))
+    {
+        for (int b = 2; b < FFT_N / 2; b++)
+        {
+            // 1. Calculate the current bar's left edge and next bar's left edge as floats
+            float current_fp_x = centerBounds.x + (b * frequency_scale);
+            float next_fp_x    = centerBounds.x + ((b + 1) * frequency_scale);
+            int start_x = (int)current_fp_x;
+            int next_x  = (int)next_fp_x;
+            int width = next_x - start_x; 
+            int height = fft[b].magnitude;
+            int start_y = centerBounds.y + centerBounds.height - height;
+
+            DrawRectangle(start_x, start_y, width, height, BLUE);
+        }
+    }
+
     /* Calibration Button */
     int footer_element_width = 300;
     if(GuiButton((Rectangle){footerBounds.x, footerBounds.y, 300, footerBounds.height}, "Calibrate")) 
