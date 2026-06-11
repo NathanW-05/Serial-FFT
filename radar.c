@@ -1,14 +1,13 @@
 #include <stdint.h>
-#include "radar.h"
-#include "config.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
-/*
-    Global State Variables
-*/
+#include "radar.h"
+#include "config.h"
+
 STATUS current_status = DISCONNECTED;
 
 float last_speed = -1;
@@ -74,13 +73,8 @@ Bin run_CFAR(Bin* fft, float bias, int* hits)
         if(cut_mag > threshold)
         {
             num_passed++;
-            //printf("Freq passed: %f   with mag: %f\n", fft[c].frequency, cut_mag);
             peak_frequency_index = c;
         }
-    }
-    if(num_passed > 0)
-    {
-        //printf("=========================\n");
     }
     *hits = num_passed;
     return (Bin){fft[peak_frequency_index].frequency, fft[peak_frequency_index].magnitude};
@@ -99,7 +93,7 @@ int calibrate(Bin* fft, float bias_increment)
     } else 
     {
         consecutive_frames_empty++;
-        if(consecutive_frames_empty == 10) // config
+        if(consecutive_frames_empty == 100) // config
         {
             g_bias = bias;
             update_status(CALIBRATED);
@@ -111,13 +105,14 @@ int calibrate(Bin* fft, float bias_increment)
 int detect_speed(Bin* fft)
 {
     int hits = 0;
-    Bin peak_idx = run_CFAR(fft,g_bias, &hits);
+    Bin peak_idx = run_CFAR(fft, g_bias, &hits);
     float mph = 2.237 * ((peak_idx.frequency * (float)C) / (2.0f * (float)BASE_FREQ));
-    if(mph > 1 && mph < 80)
+    if(mph > 10)
     {
-        printf("target detected: %f    %f\n", mph, peak_idx.magnitude);
+        printf("target detected: %f  with mag: %f and number of peaks: %d\n", mph, peak_idx.magnitude, hits);
         return 1;
     }
+    last_speed = mph;
     return 0;
 }
 
@@ -148,6 +143,7 @@ void process_packets(uint16_t** packets)
                     memcpy(ui_display_buffer, fft, FFT_N/2);
                     display_data_available = 1;
                 } 
+                free(fft);
                 break;
             } 
         }

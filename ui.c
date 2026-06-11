@@ -81,29 +81,29 @@ void render_loop()
     GuiLabel((Rectangle){headerBounds.x, headerBounds.y, headerBounds.width, headerBounds.height}, speed_text(get_last_speed()));
     GuiSetStyle(DEFAULT, TEXT_SIZE, 30);
 
-    /* Serial Plot - ToDo*/
     GuiGroupBox(centerBounds, "Live Serial Plot");
 
     //float magnitude_scale = (centerBottom - centerTop) / 20;
     float frequency_scale = (float)(sw - padding * 2) / (FFT_N / 2);
-    Bin fft[FFT_N/2];
+    static Bin fft[FFT_N/2];
 
     if (get_fft_display_data(fft))
     {
         for (int b = 2; b < FFT_N / 2; b++)
         {
-            // 1. Calculate the current bar's left edge and next bar's left edge as floats
             float current_fp_x = centerBounds.x + (b * frequency_scale);
             float next_fp_x    = centerBounds.x + ((b + 1) * frequency_scale);
             int start_x = (int)current_fp_x;
             int next_x  = (int)next_fp_x;
             int width = next_x - start_x; 
             int height = fft[b].magnitude;
+            if(height > centerBounds.height) height = centerBounds.height;
             int start_y = centerBounds.y + centerBounds.height - height;
 
             DrawRectangle(start_x, start_y, width, height, BLUE);
         }
     }
+    
 
     /* Calibration Button */
     int footer_element_width = 300;

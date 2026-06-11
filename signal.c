@@ -6,6 +6,8 @@
 
 float* hann_window = NULL;
 
+static Complex _X[FFT_N];
+
 void init_hann_window() 
 {
     hann_window = malloc(sizeof(float)*FFT_N);
